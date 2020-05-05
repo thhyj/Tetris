@@ -6,7 +6,7 @@
 ret=0 
  #map用来维护界面的信息
 O=(1 1 0 1 1 0 0 0 0)
-I=(2 2 2 2 0 0 0 0 0 0 0 0 0 0 0 0)
+I=(0 0 0 0  2 2 2 2 0 0 0 0 0 0 0 0)
 S=(0 3 3 3 3 0 0 0 0)
 Z=(4 4 0 0 4 4 0 0 0)
 L=(5 0 0 5 0 0 5 5 0)
@@ -73,8 +73,8 @@ function Check() {
                 Decode $((i+nowx)) $((j+nowy))
                 local temp2=$ret
            #     echo "temp1=${temp1}, temp2=$temp2"
-                if ((now[temp1]!=0 && map[temp2]!=0))
-       #         (((${now[$temp1]}) != 0 &&  (${map[$temp2]})!= 0)) #如果成立就说明发生了碰撞
+
+                if ((now[temp1]!=0 && map[temp2]!=0))#如果成立就说明发生了碰撞
                 then
               #      echo "fuck"
                     crash=1
@@ -85,6 +85,8 @@ function Check() {
 }
 #将当前方块逆时针旋转90°
 function Rotate() {
+#    echo "Rotate"
+    Del $nowx $nowy
     pre=(${now[*]})
     local len=${#now[*]}
   #  echo "len=$len"
@@ -94,7 +96,7 @@ function Rotate() {
        # echo "233"
         for((i = 0; i < 4; ++i)) do
             for(( j = 0; j  < 4; ++j )) do
-                Trans $i $j $len
+                Trans $((3-i)) $j $len
                 local temp1=$ret
                 Trans $j $i $len
                 local temp2=$ret
@@ -115,12 +117,20 @@ function Rotate() {
             done
         done
     fi
+  #  Add $nowx $nowy
     Check
+   # Del $nowx $nowy
     if ((crash==1)) 
     then
+    #    echo "crash"
         now=(${pre[*]})         #发生碰撞，此次旋转无效
         pre=(${tpre[*]})
+        return
     fi
+    Del $tprex $tprey
+    Add $nowx $nowy
+    tprex=$nowx
+    tprey=$nowy
 }
 #得到下一个方块的种类
 function GetNextBlock(){
@@ -159,13 +169,16 @@ function CreateNewBlock(){
 }
 #方块落地时触发的操作
 function FallToGround() {
+    
     Add nowx nowy
+    Clean
     GetNextBlock
     CreateNewBlock $nextBLock
     
 }
 function Down() {
     #echo 233
+    Del $nowx $nowy
     prex=$nowx
     prey=$nowy
     ((nowx++))
@@ -178,12 +191,46 @@ function Down() {
         prex=$tprex
         prey=$tprey
         FallToGround
+       # return
     fi
+    Del $tprex $tprey
+    Add $nowx $nowy
+    tprex=$nowx
+    tprey=$nowy
+}
+function AllDown() {
+     
+    while ((1)) 
+    do
+    Del $nowx $nowy
+    prex=$nowx
+    prey=$nowy
+        ((nowx++))
+        
+        Check
+        if ((crash==1)) 
+        then
+                    #发生碰撞,方块落地
+            nowx=$prex
+            nowy=$prey
+            prex=$tprex
+            prey=$tprey
+            FallToGround
+        # return
+            break
+        fi
+    done
+    Del $tprex $tprey
+    Add $nowx $nowy
+    tprex=$nowx
+    tprey=$nowy
 }
 function Left(){
+    Del $nowx $nowy
      prex=$nowx
     prey=$nowy
     ((nowy--))
+    Check
     if ((crash==1)) 
     then
                  #发生碰撞,平移失败
@@ -191,20 +238,33 @@ function Left(){
         nowy=$prey
         prex=$tprex
         prey=$tprey
+        #return
     fi
+    Del $tprex $tprey
+    Add $nowx $nowy
+    tprex=$nowx
+    tprey=$nowy
 }
 function Right(){
+    Del $nowx $nowy
      prex=$nowx
     prey=$nowy
     ((nowy++))
+    Check
     if ((crash==1)) 
     then
                  #发生碰撞,平移失败
+    #    echo "fuck"
         nowx=$prex
         nowy=$prey
         prex=$tprex
         prey=$tprey
+        #return
     fi
+    Del $tprex $tprey
+    Add $nowx $nowy
+    tprex=$nowx
+    tprey=$nowy
 }
 function Move() {
     local type=$1
@@ -344,6 +404,7 @@ function Del() {
                 then
                     map[$ret]=0
                  tj=$((j*3+1))
+
                 ti=$((i+1))
                 echo -ne "\033[${ti};${tj}H"
                 case "${map[$ret]}" in
@@ -395,16 +456,83 @@ function Init() {
     Assign $((rowend)) $((colend)) -1
 #    Draw
 }
+#判断一行是否填满
+function CheckRow() {
+    row=$1
+    local i=0
+    for((i = colbegin; i < colend; ++i)) do
+        Decode $row $i
+        if((map[ret]<=0))
+         then
+            return 0
+        fi
+    done
+    return 1
+}
+#删掉一行并平移上面的
+function Wash() {
+    local i=$1
+    local j=0
+    for((;i>rowbegin;--i)) do
+        for((j = colbegin; j < colend; ++j)) do
+        Decode $i $j
+        local temp1=$ret
+        Decode $((i-1)) $j
+        local temp2=$ret
+        map[$temp1]=${map[$temp2]}
+        #((map[temp1]=map[temp2]))
+        done
+    done
+    
+    for((j = colbegin; j < colend; ++j)) do
+        Decode $i $j
+        local temp1=$ret
+        map[$temp1]=0
+        done
+    Draw
+}
+#消行操作
+function Clean() {
+    local i=0
+    for(( i = rowbegin; i < rowend; ++i)) do
+    #    echo "i=$i"
+        CheckRow $i
+        if(($? == 1))
+         then
+           # echo "fuck i = $i"
+            Wash $i
+            ((--i))
+        fi
+    done
+
+}
 function Run() {
     Init
     GetNextBlock
     CreateNewBlock $nextBLock
      Draw
+    # sTTY=`stty -g`
    while [ 1 -eq 1 ] 
     do
          for ((i = 0; i < 20; i++))
             do
-                        sleep 0.02
+                        read -t 0.02 -n 1 -s key 
+                        case "$key" in
+                        "A")
+                            Rotate;;
+                        "B")
+                            Move 1;;
+                        "C")
+                            Move 3;;
+                        "D")
+                            Move 2;;
+                        esac
+                        if  [[ $key == "Z" || $key == "z" ]]
+                        then
+                            #echo "fuck"
+                            AllDown
+                        fi
+                     #   echo "$key"
             done
         Del $tprex $tprey
         Move 1
@@ -412,10 +540,13 @@ function Run() {
        
         tprex=$nowx
         tprey=$nowy
+       # Clean
     done
 }
 #隐藏光标
 echo -ne "\033[?25l"
+#取消回显
+stty -echo
 Run
 
 
