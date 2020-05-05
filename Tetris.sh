@@ -72,11 +72,11 @@ function Check() {
                 local temp1=$ret
                 Decode $((i+nowx)) $((j+nowy))
                 local temp2=$ret
-                echo "temp1=${temp1}, temp2=$temp2"
+           #     echo "temp1=${temp1}, temp2=$temp2"
                 if ((now[temp1]!=0 && map[temp2]!=0))
        #         (((${now[$temp1]}) != 0 &&  (${map[$temp2]})!= 0)) #如果成立就说明发生了碰撞
                 then
-                    echo "fuck"
+              #      echo "fuck"
                     crash=1
                     return
                 fi
@@ -165,7 +165,7 @@ function FallToGround() {
     
 }
 function Down() {
-    echo 233
+    #echo 233
     prex=$nowx
     prey=$nowy
     ((nowx++))
@@ -242,7 +242,8 @@ function Draw() {
   #          echo ${map[$ret]}
             case "${map[$ret]}" in
                 "0")
-                    echo -ne "   ";;
+                   # echo -ne "   ";;
+                   echo -ne "\033[3C";;
                 "-1")
                     echo -ne "\e[1;33;44m   \e[0m";;
                 "1")
@@ -288,6 +289,30 @@ function Add() {
             if((map[ret]==0))
             then
                 map[$ret]=$temp
+                tj=$((j*3+1))
+                ti=$((i+1))
+                echo -ne "\033[${ti};${tj}H"
+                case "${map[$ret]}" in
+                "0")
+                   # echo -ne "   ";;
+                   echo -ne "\033[3C";;
+                "-1")
+                    echo -ne "\e[1;33;44m   \e[0m";;
+                "1")
+                    echo -ne "\e[1;33;42m   \e[0m";;
+                "2")
+                    echo -ne "\e[1;33;41m   \e[0m";;
+                 "3")
+                    echo -ne "\e[1;33;43m   \e[0m";;   
+                "4")
+                    echo -ne "\e[1;33;45m   \e[0m";;
+                    "5")
+                    echo -ne "\e[1;33;46m   \e[0m";;
+                "6")
+                    echo -ne "\e[1;33;47m   \e[0m";;
+                    "7")
+                    echo -ne "\e[1;33;42m   \e[0m";;
+            esac
             fi
         done
     done
@@ -315,7 +340,35 @@ function Del() {
             if ((temp>=1)) 
             then   
                 Decode $i $j
-                 map[$ret]=0
+                if ((${map[$ret]} > 0))
+                then
+                    map[$ret]=0
+                 tj=$((j*3+1))
+                ti=$((i+1))
+                echo -ne "\033[${ti};${tj}H"
+                case "${map[$ret]}" in
+                "0")
+                  echo -ne "   ";;
+                #   echo -ne "\033[3C";;
+                "-1")
+                    echo -ne "\e[1;33;44m   \e[0m";;
+                "1")
+                    echo -ne "\e[1;33;42m   \e[0m";;
+                "2")
+                    echo -ne "\e[1;33;41m   \e[0m";;
+                 "3")
+                    echo -ne "\e[1;33;43m   \e[0m";;   
+                "4")
+                    echo -ne "\e[1;33;45m   \e[0m";;
+                    "5")
+                    echo -ne "\e[1;33;46m   \e[0m";;
+                "6")
+                    echo -ne "\e[1;33;47m   \e[0m";;
+                    "7")
+                    echo -ne "\e[1;33;42m   \e[0m";;
+            esac
+                fi
+                 
             fi
         done
     done
@@ -346,6 +399,7 @@ function Run() {
     Init
     GetNextBlock
     CreateNewBlock $nextBLock
+     Draw
    while [ 1 -eq 1 ] 
     do
          for ((i = 0; i < 20; i++))
@@ -355,7 +409,7 @@ function Run() {
         Del $tprex $tprey
         Move 1
         Add $nowx $nowy
-        Draw
+       
         tprex=$nowx
         tprey=$nowy
     done
