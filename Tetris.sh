@@ -50,6 +50,7 @@ tpre=$O
 tprex=0
 tprey=0
 #ghostx, ghosty表示落地预测的横纵坐标
+ghostcrash=0
 ghostx=0
 ghosty=0
 tpreghostx=0
@@ -89,6 +90,7 @@ function InvTrans() {
 }
 #判断移动后是否会发生碰撞
 function Check() {
+    DelGhost $ghostx $ghosty
     crash=0
     local len=${#now[*]}
     if ((len==16))
@@ -187,7 +189,7 @@ function AddQueueElement() {
                 "6")
                     echo -ne "\e[1;33;47m   \e[0m";;
                     "7")
-                    echo -ne "\e[1;33;42m   \e[0m";;
+                    echo -ne "\e[1;33;40m   \e[0m";;
             esac
             fi
         done
@@ -249,7 +251,7 @@ function DelQueueElement() {
                 "6")
                     echo -ne "\e[1;33;47m   \e[0m";;
                     "7")
-                    echo -ne "\e[1;33;42m   \e[0m";;
+                    echo -ne "\e[1;33;40m   \e[0m";;
             esac
                 fi
                  
@@ -491,6 +493,8 @@ function GetNextBlock(){
 }
 #让新的方块出现
 function CreateNewBlock(){
+   #DelGhost $ghostx $ghosty
+    #Ghost
     direction=1
     kind=$1
     case $1 in
@@ -530,7 +534,7 @@ function FallToGround() {
     Clean
     GetNextBlock
     CreateNewBlock $nextBLock
-    
+    Ghost
 }
 function Down() {
     #echo 233
@@ -600,6 +604,7 @@ function AddGhost() {
     return;
     fi
     #echo "len=$len"
+    #echo "x=${x},y=${y}"
     if((len==16))
     then
         len=4
@@ -620,7 +625,7 @@ function AddGhost() {
             then
                 if((temp>0))
                 then
-                    temp=8
+                    temp=-8
                 fi
                 map[$ret]=$temp
                 tj=$((j*3+1))
@@ -646,7 +651,7 @@ function AddGhost() {
                     echo -ne "\e[1;33;47m   \e[0m";;
                     "7")
                     echo -ne "\e[1;33;40m   \e[0m";;
-                    "8")
+                    "-8")
                     echo -ne "\e[1;33;39m 0 \e[0m";;
             esac
             fi
@@ -656,14 +661,15 @@ function AddGhost() {
 function DelGhost() {
      local x=$1
     local y=$2
-    local len=${#inHand[*]}
-    #echo "x=${x}, y=${y}"
+    local len=${#now[*]}
     #echo "length=$len"
     if ((len<9))
     then
    # echo "cnm"
     return;
     fi
+     #   echo "x=${x}, y=${y}"
+
     if((len==16))
     then
         len=4
@@ -679,7 +685,7 @@ function DelGhost() {
             if ((temp>=1)) 
             then   
                 Decode $i $j
-                if ((${map[$ret]} > 0))
+                if ((${map[$ret]} == -8))
                 then
                     map[$ret]=0
                  tj=$((j*3+1))
@@ -705,7 +711,9 @@ function DelGhost() {
                 "6")
                     echo -ne "\e[1;33;47m   \e[0m";;
                     "7")
-                    echo -ne "\e[1;33;42m   \e[0m";;
+                    echo -ne "\e[1;33;40m   \e[0m";;
+                    "-8")
+                    echo -ne "\e[1;33;39m 0 \e[0m";;
             esac
                 fi
                  
@@ -714,7 +722,7 @@ function DelGhost() {
     done
 }
 function CheckGhost() {
-    crash=0
+    ghostcrash=0
     local len=${#now[*]}
     if ((len==16))
     then
@@ -732,32 +740,43 @@ function CheckGhost() {
                 local temp2=$ret
            #     echo "temp1=${temp1}, temp2=$temp2"
 
-                if ((now[temp1]!=0 && map[temp2]!=0))#如果成立就说明发生了碰撞
+                if ((now[temp1]>0 && map[temp2]!=0))#如果成立就说明发生了碰撞
                 then
               #      echo "fuck"
-                    crash=1
+                    ghostcrash=1
                     return
                 fi
             done
     done
 }
 function Ghost(){
+  #  read -n 1 fuck
+    
+    DelGhost $ghostx $ghosty
+    if((nowx > 16))
+    then
+    return
+    fi
+    ((ghostx=nowx+4))
+    ghosty=$nowy
     while ((1)) 
     do
-    DelGhost $ghostx $ghosty
+  #  echo "fucl"
+    
     preghostx=$ghostx 
     preghosty=$ghosty
         ((ghostx++))
         
         CheckGhost
-        if ((crash==1)) 
+        if ((ghostcrash==1)) 
         then
                     #发生碰撞,方块落地
+        #    echo "ghostx=$ghostx"
             ghostx=$preghostx
             ghosty=$preghosty
             preghostx=$tpreghostx
             preghosty=$tpreghosty
-            FallToGround
+            #FallToGround
         # return
             break
         fi
@@ -875,7 +894,9 @@ function Draw() {
                 "6")
                     echo -ne "\e[1;33;47m   \e[0m";;
                     "7")
-                    echo -ne "\e[1;33;42m   \e[0m";;
+                    echo -ne "\e[1;33;40m   \e[0m";;
+                     "-8")
+                    echo -ne "\e[1;33;39m 0 \e[0m";;
             esac
         done
             echo ""
@@ -928,7 +949,9 @@ function Add() {
                 "6")
                     echo -ne "\e[1;33;47m   \e[0m";;
                     "7")
-                    echo -ne "\e[1;33;42m   \e[0m";;
+                    echo -ne "\e[1;33;40m   \e[0m";;
+                     "8")
+                    echo -ne "\e[1;33;39m 0 \e[0m";;
             esac
             fi
         done
@@ -983,7 +1006,9 @@ function Del() {
                 "6")
                     echo -ne "\e[1;33;47m   \e[0m";;
                     "7")
-                    echo -ne "\e[1;33;42m   \e[0m";;
+                    echo -ne "\e[1;33;40m   \e[0m";;
+                     "8")
+                    echo -ne "\e[1;33;39m 0 \e[0m";;
             esac
                 fi
                  
@@ -1045,7 +1070,7 @@ function AddInHand() {
                 "6")
                     echo -ne "\e[1;33;47m   \e[0m";;
                     "7")
-                    echo -ne "\e[1;33;42m   \e[0m";;
+                    echo -ne "\e[1;33;40m   \e[0m";;
             esac
             fi
         done
@@ -1105,7 +1130,7 @@ function DelInHand() {
                 "6")
                     echo -ne "\e[1;33;47m   \e[0m";;
                     "7")
-                    echo -ne "\e[1;33;42m   \e[0m";;
+                    echo -ne "\e[1;33;40m   \e[0m";;
             esac
                 fi
                  
@@ -1343,34 +1368,50 @@ function Run() {
                         read -t 0.02 -n 1 -s key 
                         case "$key" in
                         "A")
-                            RRotate;;
+                        DelGhost $ghostx $ghosty
+                            RRotate
+                            Ghost;;
+                            
                         "B")
-                            Move 1;;
+                        DelGhost $ghostx $ghosty
+                            Move 1
+                            Ghost;;
                         "C")
-                            Move 3;;
+                        DelGhost $ghostx $ghosty
+                            Move 3
+                            Ghost;;
                         "D")
-                            Move 2;;
+                        DelGhost $ghostx $ghosty
+                            Move 2
+                            Ghost;;
                         esac
                         if  [[ $key == "c" ]]
                         then
                             #echo "fuck"
+                            DelGhost $ghostx $ghosty
                             Rotate
+                            Ghost
                         fi
                         if  [[ $key == "x" ]]
                         then
                             #echo "fuck"
                             play -q skin/sfx/default/sfx_harddrop.wav &
+                            DelGhost $ghostx $ghosty
                             AllDown
+
                         fi
                         if  [[ $key == "z" ]]
                         then
                             #echo "fuck"
+                            DelGhost $ghostx $ghosty
                             Hold
+                            Ghost
                         fi
                      #   echo "$key"
             done
         Del $tprex $tprey
         Down
+        Ghost
         Add $nowx $nowy
        
         tprex=$nowx
