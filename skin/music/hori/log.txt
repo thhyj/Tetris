@@ -1,0 +1,5 @@
+3
+skin\music\hori
+bgm_01.ogg
+bgm_02.ogg
+bgm_03.ogg
