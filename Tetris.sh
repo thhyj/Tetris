@@ -1,9 +1,38 @@
+ trap "stty echo;TaskEnd" SIGINT SIGTERM SIGQUIT SIGHUP SIGSTOP SIGTSTP
+ cESC=`echo -ne "\033"`
+ #监听是否在旋转中
+ inRotate=0
+ #监听上下左右键是否被按下
+ up=0
+ down=0
+ left=0
+ right=0
+#弹墙旋转的有限状态自动机
+#0~4是上转右
+#5~9是右转下
+#10~14是下转左
+#  15~19是左转上
+tNodex=(0 0 1 -2 -2 0 0 -1 2 2 0 0 1 -2 -2 0 0 -1 2 2)
+tNodey=(0 -1 -1 0 -1 0 1 1 0 1 0 1 1 0 1 0 -1 -1 0 -1)
+ #totdel
+ totdel=0
+ #mode 表示游戏模式1是普通模式
+ mode=1
+ #gameover表示是否gameover
+ gameover=0
  #totTime 表示每一帧的总时间
  totTime=0
- #startTime 表示当前帧开始时间
- startTime=0
+ #startTime 表示游戏开始时间
+ startTime=`date +%s`
+ #lastTime 表示上一次生成垃圾行的时间
+ lastTime=0
+ #trashTime生成垃圾行的间隔时间
  #ret这个变量用来表示函数的返回值
 ret=0 
+#control记录此次移动是否为玩家操作的
+control=0
+this=$!
+taskend=0
 #suc记录上一次落地是否成功消除方块
 suc=0
 #tet记录上一次消除消除的几行
@@ -27,6 +56,14 @@ tail=6
 firstQueue=0
 queueElement=0
  #map用来维护界面的信息
+ colorO=40m
+ colorI=46m
+ colorS=42m
+  colorZ=41m
+ colorL=43m
+ colorJ=44m
+ colorT=45m
+ colorK=47m
 O=(1 1 0 1 1 0 0 0 0)
 I=(0 0 0 0  2 2 2 2 0 0 0 0 0 0 0 0)
 S=(0 3 3 3 3 0 0 0 0)
@@ -175,21 +212,21 @@ function AddQueueElement() {
                    # echo -ne "   ";;
                    echo -ne "\033[3C";;
                 "-1")
-                    echo -ne "\e[1;33;44m   \e[0m";;
+                    echo -ne "\e[1;33;${colorK}[ ]\e[0m";;
                 "1")
-                    echo -ne "\e[1;33;42m   \e[0m";;
+                    echo -ne "\e[1;33;${colorO}[ ]\e[0m";;
                 "2")
-                    echo -ne "\e[1;33;41m   \e[0m";;
+                    echo -ne "\e[1;33;${colorI}[ ]\e[0m";;
                  "3")
-                    echo -ne "\e[1;33;43m   \e[0m";;   
+                    echo -ne "\e[1;33;${colorS}[ ]\e[0m";;   
                 "4")
-                    echo -ne "\e[1;33;45m   \e[0m";;
+                    echo -ne "\e[1;33;${colorZ}[ ]\e[0m";;
                     "5")
-                    echo -ne "\e[1;33;46m   \e[0m";;
+                    echo -ne "\e[1;33;${colorL}[ ]\e[0m";;
                 "6")
-                    echo -ne "\e[1;33;47m   \e[0m";;
+                    echo -ne "\e[1;33;${colorJ}[ ]\e[0m";;
                     "7")
-                    echo -ne "\e[1;33;40m   \e[0m";;
+                    echo -ne "\e[1;33;${colorT}[ ]\e[0m";;
             esac
             fi
         done
@@ -237,21 +274,21 @@ function DelQueueElement() {
                   echo -ne "   ";;
                 #   echo -ne "\033[3C";;
                 "-1")
-                    echo -ne "\e[1;33;44m   \e[0m";;
+                    echo -ne "\e[1;33;${colorK}[ ]\e[0m";;
                 "1")
-                    echo -ne "\e[1;33;42m   \e[0m";;
+                    echo -ne "\e[1;33;${colorO}[ ]\e[0m";;
                 "2")
-                    echo -ne "\e[1;33;41m   \e[0m";;
+                    echo -ne "\e[1;33;${colorI}[ ]\e[0m";;
                  "3")
-                    echo -ne "\e[1;33;43m   \e[0m";;   
+                    echo -ne "\e[1;33;${colorS}[ ]\e[0m";;   
                 "4")
-                    echo -ne "\e[1;33;45m   \e[0m";;
+                    echo -ne "\e[1;33;${colorZ}[ ]\e[0m";;
                     "5")
-                    echo -ne "\e[1;33;46m   \e[0m";;
+                    echo -ne "\e[1;33;${colorL}[ ]\e[0m";;
                 "6")
-                    echo -ne "\e[1;33;47m   \e[0m";;
+                    echo -ne "\e[1;33;${colorJ}[ ]\e[0m";;
                     "7")
-                    echo -ne "\e[1;33;40m   \e[0m";;
+                    echo -ne "\e[1;33;${colorT}[ ]\e[0m";;
             esac
                 fi
                  
@@ -357,134 +394,215 @@ function UpdateFirstQueue(){
 }
 #将当前方块逆时针旋转90°
 function Rotate() {
+    inRotate=1
 #    echo "Rotate"
-    Del $nowx $nowy
+    tprex=$nowx
+    tprey=$nowy
+    local ppx=$nowx
+    local ppy=$nowy
+    local nowid=$(((direction-1) * 5))
+    if((nowid==0))
+    then
+    nowid=20
+    fi
+    ((nowid-=5))
+    #nowid表示当前在自动机上的哪个状态
+    Del $tprex $tprey
     pre=(${now[*]})
     local len=${#now[*]}
   #  echo "len=$len"
-    if ((len == 16)) 
-    then
-        len=4
-       # echo "233"
-        for((i = 0; i < 4; ++i)) do
-            for(( j = 0; j  < 4; ++j )) do
-                Trans $((3-i)) $j $len
-                local temp1=$ret
-                Trans $j $i $len
-                local temp2=$ret
-                now[$temp1]=${pre[$temp2]}
+  local tx=0
+  local ty=0
+  
+
+
+    for((k=0;k<=0;++k)) do
+   # crash=0
+  :<<!      
+  read -n 1 up <up
+        read -n 1 down <down
+        read -n 1 left <left
+        read -n 1 right <right
+        read -t 0.1 -n 1 -s key 
+case "$key" in
+"A")
+    up=1;;
+"B")
+down=1;;
+"C")
+rihgt=1;;
+"D")
+left=1;;
+esac 
+!
+         tx=${tNodex[$((k+nowid))]}
+        ty=${tNodey[$((k+nowid))]}
+        ((tx-=down*1))
+        ((ty-=right*1+left*-1))
+     #   echo "tx = ${tx}, ty=${ty}">>Tspin
+     #   echo "down=${down}">>Tspin
+        ((nowx-=tx))
+        ((nowy-=ty))
+        if ((len == 16)) 
+        then
+            len=4
+        # echo "233"
+            for((i = 0; i < 4; ++i)) do
+                for(( j = 0; j  < 4; ++j )) do
+                    Trans $((3-i)) $j $len
+                    local temp1=$ret
+                    Trans $j $i $len
+                    local temp2=$ret
+                    now[$temp1]=${pre[$temp2]}
+                done
             done
-        done
-    fi
-    if ((len == 9)) 
-    then
-        len=3
-        for((i = 0; i < 3; ++i)) do
-            for(( j = 0; j  < 3; ++j )) do
-                Trans $((2-i)) $j $len
-                local temp1=$ret 
-                Trans $j $i $len
-                local temp2=$ret
-                now[$temp1]=${pre[$temp2]}
+        fi
+        if ((len == 9)) 
+        then
+            len=3
+            for((i = 0; i < 3; ++i)) do
+                for(( j = 0; j  < 3; ++j )) do
+                    Trans $((2-i)) $j $len
+                    local temp1=$ret 
+                    Trans $j $i $len
+                    local temp2=$ret
+                    now[$temp1]=${pre[$temp2]}
+                done
             done
-        done
-    fi
-  #  Add $nowx $nowy
-    Check
-   # Del $nowx $nowy
+        fi
+    #  Add $nowx $nowy
+        Check
+    # Del $nowx $nowy
+        
+        #维护朝向
+        if((crash==0)) 
+            then
+            ((direction--))
+            if ((direction==0))
+            then
+                direction=4
+            fi
+       #     Del $tprex $tprey
+            Add $nowx $nowy
+            tprex=$nowx
+            tprey=$nowy
+            if((crash==1)) 
+            then
+                play -q skin/sfx/default/sfx_rotatefail.wav &
+                else 
+                play -q skin/sfx/default/sfx_rotate.wav &
+            fi
+            return
+            fi
+            nowx=$ppx
+            nowy=$ppy
+    done
+    nowx=$ppx
+        nowy=$ppy
     if ((crash==1)) 
-    then
-    #    echo "crash"
-        now=(${pre[*]})         #发生碰撞，此次旋转无效
-        pre=(${tpre[*]})
-        Del $tprex $tprey
-    Add $nowx $nowy
-    tprex=$nowx
-    tprey=$nowy
-    play -q skin/sfx/default/sfx_rotatefail.wav &
-        return
-    fi
-    #维护朝向
-    ((direction--))
-    if ((direction==0))
-    then
-        direction=4
-    fi
-    Del $tprex $tprey
-    Add $nowx $nowy
-    tprex=$nowx
-    tprey=$nowy
-    if((crash==1)) 
-    then
+        then
+        #    echo "crash"
+            now=(${pre[*]})         #发生碰撞，此次旋转无效
+            pre=(${tpre[*]})
+          #  Del $tprex $tprey
+        Add $nowx $nowy
+        tprex=$nowx
+        tprey=$nowy
         play -q skin/sfx/default/sfx_rotatefail.wav &
-        else 
-        play -q skin/sfx/default/sfx_rotate.wav &
-    fi
+            return
+        fi
+        inRotate=0
 }
 function RRotate() {
+    inRotate=1
 #    echo "Rotate"
+tprex=$nowx
+    tprey=$nowy
+    local ppx=$nowx
+    local ppy=$nowy
+    #nowid表示当前在自动机上的哪个状态
+    local nowid=$(((direction-1) * 5))
     Del $nowx $nowy
     pre=(${now[*]})
     local len=${#now[*]}
   #  echo "len=$len"
-    if ((len == 16)) 
-    then
-        len=4
-       # echo "233"
-        for((i = 0; i < 4; ++i)) do
-            for(( j = 0; j  < 4; ++j )) do
-                Trans $((3-i)) $j $len
-                local temp1=$ret
-                Trans $j $i $len
-                local temp2=$ret
-                now[$temp2]=${pre[$temp1]}
+    local tx=0
+    local ty=0
+    for((k=0;k<=4;++k)) do
+    #    crash=0
+        tx=${tNodex[$((k+nowid))]}
+        ty=${tNodey[$((k+nowid))]}
+        ((nowx+=tx))
+        ((nowy+=ty))
+        if ((len == 16)) 
+        then
+            len=4
+        # echo "233"
+            for((i = 0; i < 4; ++i)) do
+                for(( j = 0; j  < 4; ++j )) do
+                    Trans $((3-i)) $j $len
+                    local temp1=$ret
+                    Trans $j $i $len
+                    local temp2=$ret
+                    now[$temp2]=${pre[$temp1]}
+                done
             done
-        done
-    fi
-    if ((len == 9)) 
-    then
-        len=3
-        for((i = 0; i < 3; ++i)) do
-            for(( j = 0; j  < 3; ++j )) do
-                Trans $((2-i)) $j $len
-                local temp1=$ret 
-                Trans $j $i $len
-                local temp2=$ret
-                now[$temp2]=${pre[$temp1]}
+        fi
+        if ((len == 9)) 
+        then
+            len=3
+            for((i = 0; i < 3; ++i)) do
+                for(( j = 0; j  < 3; ++j )) do
+                    Trans $((2-i)) $j $len
+                    local temp1=$ret 
+                    Trans $j $i $len
+                    local temp2=$ret
+                    now[$temp2]=${pre[$temp1]}
+                done
             done
-        done
-    fi
-  #  Add $nowx $nowy
-    Check
-   # Del $nowx $nowy
+        fi
+    #  Add $nowx $nowy
+        Check
+    # Del $nowx $nowy
+        #维护朝向
+        #如果转过去了
+        if((crash==0))
+        then
+            ((direction++))
+            if ((direction==5))
+            then
+                direction=1
+            fi
+         #   Del $tprex $tprey
+            Add $nowx $nowy
+            tprex=$nowx
+            tprey=$nowy
+            if((crash==1)) 
+            then
+                play -q skin/sfx/default/sfx_rotatefail.wav &
+                else 
+                play -q skin/sfx/default/sfx_rotate.wav &
+            fi
+            return
+        fi
+        nowx=$ppx
+        nowy=$ppy
+    done
+    nowx=$ppx
+        nowy=$ppy
     if ((crash==1)) 
-    then
-    #    echo "crash"
-        now=(${pre[*]})         #发生碰撞，此次旋转无效
-        pre=(${tpre[*]})
-        Del $tprex $tprey
-    Add $nowx $nowy
-    tprex=$nowx
-    tprey=$nowy
-    play -q skin/sfx/default/sfx_rotatefail.wav &
-        return
-    fi
-    #维护朝向
-    ((direction++))
-    if ((direction==5))
-    then
-        direction=1
-    fi
-    Del $tprex $tprey
-    Add $nowx $nowy
-    tprex=$nowx
-    tprey=$nowy
-    if((crash==1)) 
-    then
+        then
+        #    echo "crash"
+            now=(${pre[*]})         #发生碰撞，此次旋转无效
+            pre=(${tpre[*]})
+       #     Del $tprex $tprey
+        Add $nowx $nowy
+        tprex=$nowx
+        tprey=$nowy
         play -q skin/sfx/default/sfx_rotatefail.wav &
-        else 
-        play -q skin/sfx/default/sfx_rotate.wav &
-    fi
+            return
+        fi
+         inRotate=0
 }
 #得到下一个方块的种类
 function GetNextBlock(){
@@ -525,6 +643,43 @@ function CreateNewBlock(){
     prey=15
     tprex=3
     tprey=15
+    Check
+    if ((crash==1)) 
+    then
+  #  TaskEnd
+    gameover=1
+    fi
+}
+#垃圾行生成
+function Trash(){
+    local i=0
+    local j=0
+    local blank=$(($RANDOM % 10 + colbegin))
+ #   echo "blank=$blank"
+  #  sleep 1
+    for((i=rowbegin;i<rowend;++i)) do
+        for((j = colbegin; j < colend; ++j)) do
+        Decode $i $j
+        local temp1=$ret
+        Decode $((i+1)) $j
+        local temp2=$ret
+        map[$temp1]=${map[$temp2]}
+        #((map[temp1]=map[temp2]))
+        done
+    done
+    
+    for((j = colbegin; j < colend; ++j)) do
+       
+        Decode $((rowend-1)) $j
+        local temp1=$ret
+         if((j==blank))
+         then
+         map[$temp1]=0
+        continue
+        fi
+        map[$temp1]=-1
+        done
+    Draw
 }
 #方块落地时触发的操作
 function FallToGround() {
@@ -532,9 +687,19 @@ function FallToGround() {
     change=0
     Add nowx nowy
     Clean
+    if((mode==3))
+    then
+        while((`date +%s`-lastTime > 5))
+         do
+        Trash
+        ((lastTime+=5))
+        done
+    fi
     GetNextBlock
     CreateNewBlock $nextBLock
+    
     Ghost
+    
 }
 function Down() {
     #echo 233
@@ -550,7 +715,10 @@ function Down() {
         nowy=$prey
         prex=$tprex
         prey=$tprey
-        FallToGround
+        if ((control==0))
+        then
+            FallToGround
+        fi
        # return
     fi
     Del $tprex $tprey
@@ -636,21 +804,21 @@ function AddGhost() {
                    # echo -ne "   ";;
                    echo -ne "\033[3C";;
                 "-1")
-                    echo -ne "\e[1;33;44m   \e[0m";;
+                    echo -ne "\e[1;33;${colorK}[ ]\e[0m";;
                 "1")
-                    echo -ne "\e[1;33;42m   \e[0m";;
+                    echo -ne "\e[1;33;${colorO}[ ]\e[0m";;
                 "2")
-                    echo -ne "\e[1;33;41m   \e[0m";;
+                    echo -ne "\e[1;33;${colorI}[ ]\e[0m";;
                  "3")
-                    echo -ne "\e[1;33;43m   \e[0m";;   
+                    echo -ne "\e[1;33;${colorS}[ ]\e[0m";;   
                 "4")
-                    echo -ne "\e[1;33;45m   \e[0m";;
+                    echo -ne "\e[1;33;${colorZ}[ ]\e[0m";;
                     "5")
-                    echo -ne "\e[1;33;46m   \e[0m";;
+                    echo -ne "\e[1;33;${colorL}[ ]\e[0m";;
                 "6")
-                    echo -ne "\e[1;33;47m   \e[0m";;
+                    echo -ne "\e[1;33;${colorJ}[ ]\e[0m";;
                     "7")
-                    echo -ne "\e[1;33;40m   \e[0m";;
+                    echo -ne "\e[1;33;${colorT}[ ]\e[0m";;
                     "-8")
                     echo -ne "\e[1;33;39m 0 \e[0m";;
             esac
@@ -697,21 +865,21 @@ function DelGhost() {
                   echo -ne "   ";;
                 #   echo -ne "\033[3C";;
                 "-1")
-                    echo -ne "\e[1;33;44m   \e[0m";;
+                    echo -ne "\e[1;33;${colorK}[ ]\e[0m";;
                 "1")
-                    echo -ne "\e[1;33;42m   \e[0m";;
+                    echo -ne "\e[1;33;${colorO}[ ]\e[0m";;
                 "2")
-                    echo -ne "\e[1;33;41m   \e[0m";;
+                    echo -ne "\e[1;33;${colorI}[ ]\e[0m";;
                  "3")
-                    echo -ne "\e[1;33;43m   \e[0m";;   
+                    echo -ne "\e[1;33;${colorS}[ ]\e[0m";;   
                 "4")
-                    echo -ne "\e[1;33;45m   \e[0m";;
+                    echo -ne "\e[1;33;${colorZ}[ ]\e[0m";;
                     "5")
-                    echo -ne "\e[1;33;46m   \e[0m";;
+                    echo -ne "\e[1;33;${colorL}[ ]\e[0m";;
                 "6")
-                    echo -ne "\e[1;33;47m   \e[0m";;
+                    echo -ne "\e[1;33;${colorJ}[ ]\e[0m";;
                     "7")
-                    echo -ne "\e[1;33;40m   \e[0m";;
+                    echo -ne "\e[1;33;${colorT}[ ]\e[0m";;
                     "-8")
                     echo -ne "\e[1;33;39m 0 \e[0m";;
             esac
@@ -722,6 +890,8 @@ function DelGhost() {
     done
 }
 function CheckGhost() {
+      local x=nowx
+    local y=nowy
     ghostcrash=0
     local len=${#now[*]}
     if ((len==16))
@@ -732,8 +902,25 @@ function CheckGhost() {
     then
         len=3
     fi
-    for((i = 0; i < len; ++i)) do
-            for(( j = 0; j  < len; ++j )) do
+    for((i = x ; i < x + len ; ++i)) do
+        for((j = y; j < y + len; ++j)) do
+            Trans $((i - x)) $((j - y)) $len
+            temp=${now[$ret]}
+            if ((temp>=1)) 
+            then   
+                Decode $i $j
+                if ((${map[$ret]} > 0))
+                then
+                    map[$ret]=0
+                 tj=$((j*3+1))
+                ti=$((i+1))
+                fi
+                 
+            fi
+        done
+    done
+    for((i = 0; i < len && ghostcrash != 1; ++i)) do
+            for(( j = 0; j  < len && ghostcrash != 1; ++j )) do
                 Trans $i $j $len
                 local temp1=$ret
                 Decode $((i+ghostx)) $((j+ghosty))
@@ -742,26 +929,54 @@ function CheckGhost() {
 
                 if ((now[temp1]>0 && map[temp2]!=0))#如果成立就说明发生了碰撞
                 then
-              #      echo "fuck"
                     ghostcrash=1
-                    return
+                    break
                 fi
             done
+            done
+    
+    local len=${#now[*]}
+    if((len==16))
+    then
+        len=4
+    fi
+    if((len==9))
+    then
+        len=3
+    fi
+    for((i = x ; i < x + len ; ++i)) do
+        for((j = y; j < y + len; ++j)) do
+            Trans $((i - x)) $((j - y)) $len
+    #        echo "ret =  $ret"
+            local temp=${now[$ret]}
+     #       echo "temp = $temp"
+            Decode $i $j
+      #      echo "i = $i, j = $j, ret = $ret"
+            if((map[ret]==0))
+            then
+                map[$ret]=$temp
+                tj=$((j*3+1))
+                ti=$((i+1))
+                   # echo -ne "   ";;
+            fi
+        done
     done
+    pre=(${now[*]})
+    prex=$x
+    prey=$y
+    
 }
 function Ghost(){
-  #  read -n 1 fuck
     
     DelGhost $ghostx $ghosty
     if((nowx > 16))
     then
     return
     fi
-    ((ghostx=nowx+4))
+    ((ghostx=nowx))
     ghosty=$nowy
     while ((1)) 
     do
-  #  echo "fucl"
     
     preghostx=$ghostx 
     preghosty=$ghosty
@@ -770,19 +985,19 @@ function Ghost(){
         CheckGhost
         if ((ghostcrash==1)) 
         then
-                    #发生碰撞,方块落地
         #    echo "ghostx=$ghostx"
             ghostx=$preghostx
             ghosty=$preghosty
             preghostx=$tpreghostx
             preghosty=$tpreghosty
             #FallToGround
-        # return
-            break
+                AddGhost $ghostx $ghosty
+         return
+        #    break
         fi
     done
     DelGhost $tpreghostx $tpreghosty
-    AddGhost $ghostx $ghosty
+   # AddGhost $ghostx $ghosty
     tpreghostx=$ghostx
     tpreghosty=$ghosty
 }
@@ -880,21 +1095,21 @@ function Draw() {
                    # echo -ne "   ";;
                    echo -ne "\033[3C";;
                 "-1")
-                    echo -ne "\e[1;33;44m   \e[0m";;
+                    echo -ne "\e[1;33;${colorK}[ ]\e[0m";;
                 "1")
-                    echo -ne "\e[1;33;42m   \e[0m";;
+                    echo -ne "\e[1;33;${colorO}[ ]\e[0m";;
                 "2")
-                    echo -ne "\e[1;33;41m   \e[0m";;
+                    echo -ne "\e[1;33;${colorI}[ ]\e[0m";;
                  "3")
-                    echo -ne "\e[1;33;43m   \e[0m";;   
+                    echo -ne "\e[1;33;${colorS}[ ]\e[0m";;   
                 "4")
-                    echo -ne "\e[1;33;45m   \e[0m";;
+                    echo -ne "\e[1;33;${colorZ}[ ]\e[0m";;
                     "5")
-                    echo -ne "\e[1;33;46m   \e[0m";;
+                    echo -ne "\e[1;33;${colorL}[ ]\e[0m";;
                 "6")
-                    echo -ne "\e[1;33;47m   \e[0m";;
+                    echo -ne "\e[1;33;${colorJ}[ ]\e[0m";;
                     "7")
-                    echo -ne "\e[1;33;40m   \e[0m";;
+                    echo -ne "\e[1;33;${colorT}[ ]\e[0m";;
                      "-8")
                     echo -ne "\e[1;33;39m 0 \e[0m";;
             esac
@@ -935,21 +1150,21 @@ function Add() {
                    # echo -ne "   ";;
                    echo -ne "\033[3C";;
                 "-1")
-                    echo -ne "\e[1;33;44m   \e[0m";;
+                    echo -ne "\e[1;33;${colorK}[ ]\e[0m";;
                 "1")
-                    echo -ne "\e[1;33;42m   \e[0m";;
+                    echo -ne "\e[1;33;${colorO}[ ]\e[0m";;
                 "2")
-                    echo -ne "\e[1;33;41m   \e[0m";;
+                    echo -ne "\e[1;33;${colorI}[ ]\e[0m";;
                  "3")
-                    echo -ne "\e[1;33;43m   \e[0m";;   
+                    echo -ne "\e[1;33;${colorS}[ ]\e[0m";;   
                 "4")
-                    echo -ne "\e[1;33;45m   \e[0m";;
+                    echo -ne "\e[1;33;${colorZ}[ ]\e[0m";;
                     "5")
-                    echo -ne "\e[1;33;46m   \e[0m";;
+                    echo -ne "\e[1;33;${colorL}[ ]\e[0m";;
                 "6")
-                    echo -ne "\e[1;33;47m   \e[0m";;
+                    echo -ne "\e[1;33;${colorJ}[ ]\e[0m";;
                     "7")
-                    echo -ne "\e[1;33;40m   \e[0m";;
+                    echo -ne "\e[1;33;${colorT}[ ]\e[0m";;
                      "8")
                     echo -ne "\e[1;33;39m 0 \e[0m";;
             esac
@@ -992,21 +1207,21 @@ function Del() {
                   echo -ne "   ";;
                 #   echo -ne "\033[3C";;
                 "-1")
-                    echo -ne "\e[1;33;44m   \e[0m";;
+                    echo -ne "\e[1;33;${colorK}[ ]\e[0m";;
                 "1")
-                    echo -ne "\e[1;33;42m   \e[0m";;
+                    echo -ne "\e[1;33;${colorO}[ ]\e[0m";;
                 "2")
-                    echo -ne "\e[1;33;41m   \e[0m";;
+                    echo -ne "\e[1;33;${colorI}[ ]\e[0m";;
                  "3")
-                    echo -ne "\e[1;33;43m   \e[0m";;   
+                    echo -ne "\e[1;33;${colorS}[ ]\e[0m";;   
                 "4")
-                    echo -ne "\e[1;33;45m   \e[0m";;
+                    echo -ne "\e[1;33;${colorZ}[ ]\e[0m";;
                     "5")
-                    echo -ne "\e[1;33;46m   \e[0m";;
+                    echo -ne "\e[1;33;${colorL}[ ]\e[0m";;
                 "6")
-                    echo -ne "\e[1;33;47m   \e[0m";;
+                    echo -ne "\e[1;33;${colorJ}[ ]\e[0m";;
                     "7")
-                    echo -ne "\e[1;33;40m   \e[0m";;
+                    echo -ne "\e[1;33;${colorT}[ ]\e[0m";;
                      "8")
                     echo -ne "\e[1;33;39m 0 \e[0m";;
             esac
@@ -1056,21 +1271,21 @@ function AddInHand() {
                    # echo -ne "   ";;
                    echo -ne "\033[3C";;
                 "-1")
-                    echo -ne "\e[1;33;44m   \e[0m";;
+                    echo -ne "\e[1;33;${colorK}[ ]\e[0m";;
                 "1")
-                    echo -ne "\e[1;33;42m   \e[0m";;
+                    echo -ne "\e[1;33;${colorO}[ ]\e[0m";;
                 "2")
-                    echo -ne "\e[1;33;41m   \e[0m";;
+                    echo -ne "\e[1;33;${colorI}[ ]\e[0m";;
                  "3")
-                    echo -ne "\e[1;33;43m   \e[0m";;   
+                    echo -ne "\e[1;33;${colorS}[ ]\e[0m";;   
                 "4")
-                    echo -ne "\e[1;33;45m   \e[0m";;
+                    echo -ne "\e[1;33;${colorZ}[ ]\e[0m";;
                     "5")
-                    echo -ne "\e[1;33;46m   \e[0m";;
+                    echo -ne "\e[1;33;${colorL}[ ]\e[0m";;
                 "6")
-                    echo -ne "\e[1;33;47m   \e[0m";;
+                    echo -ne "\e[1;33;${colorJ}[ ]\e[0m";;
                     "7")
-                    echo -ne "\e[1;33;40m   \e[0m";;
+                    echo -ne "\e[1;33;${colorT}[ ]\e[0m";;
             esac
             fi
         done
@@ -1116,21 +1331,21 @@ function DelInHand() {
                   echo -ne "   ";;
                 #   echo -ne "\033[3C";;
                 "-1")
-                    echo -ne "\e[1;33;44m   \e[0m";;
+                    echo -ne "\e[1;33;${colorK}[ ]\e[0m";;
                 "1")
-                    echo -ne "\e[1;33;42m   \e[0m";;
+                    echo -ne "\e[1;33;${colorO}[ ]\e[0m";;
                 "2")
-                    echo -ne "\e[1;33;41m   \e[0m";;
+                    echo -ne "\e[1;33;${colorI}[ ]\e[0m";;
                  "3")
-                    echo -ne "\e[1;33;43m   \e[0m";;   
+                    echo -ne "\e[1;33;${colorS}[ ]\e[0m";;   
                 "4")
-                    echo -ne "\e[1;33;45m   \e[0m";;
+                    echo -ne "\e[1;33;${colorZ}[ ]\e[0m";;
                     "5")
-                    echo -ne "\e[1;33;46m   \e[0m";;
+                    echo -ne "\e[1;33;${colorL}[ ]\e[0m";;
                 "6")
-                    echo -ne "\e[1;33;47m   \e[0m";;
+                    echo -ne "\e[1;33;${colorJ}[ ]\e[0m";;
                     "7")
-                    echo -ne "\e[1;33;40m   \e[0m";;
+                    echo -ne "\e[1;33;${colorT}[ ]\e[0m";;
             esac
                 fi
                  
@@ -1141,6 +1356,14 @@ function DelInHand() {
 
 #分数显示函数
 function scoreUpdate() {
+                        echo -ne "\033[21;16H"
+    echo -ne "         "
+    echo -ne "\033[21;16H"
+    echo "time:$((`date +%s`-startTime))"
+    echo -ne "\033[22;16H"
+    echo -ne "         "
+    echo -ne "\033[22;16H"
+    echo "totdel:$totdel"
     echo -ne "\033[23;16H"
     echo -ne "         "
     echo -ne "\033[24;16H"
@@ -1149,7 +1372,7 @@ function scoreUpdate() {
     echo "score:$score"
     echo -ne "\033[24;16H"
     echo "combo:$suc"
-    echo $score > score
+   # echo $score > score
 }
 function Init() {
     #先生成一波第二个队列，然后前6个元素丢进第一个里
@@ -1186,7 +1409,7 @@ function CheckRow() {
     local i=0
     for((i = colbegin; i < colend; ++i)) do
         Decode $row $i
-        if((map[ret]<=0))
+        if((map[ret]==0))
          then
             return 0
         fi
@@ -1232,9 +1455,12 @@ function Clean() {
         fi
     done
     #如果有消行的话
+    ((totdel+=tot))
+    
     if((tot>0))
     then
         #如果不是连续消行
+	((score+=${combo[$suc]}))
         if((suc==0)) 
         then
             case "$tot" in
@@ -1298,15 +1524,36 @@ function Clean() {
             then
                     play -q skin/sfx/default/sfx_combo${suc}.wav &
             fi
-            ((score+=${combo[$suc]}))
+            
         
         fi
         ((suc++))
+        if((mode==2&&totdel>=40))
+    then
+        taskend=1
+         clear
+        echo "mission complete"
+        echo "请Ctrl+c退出游戏"
+        play -q skin/voice/default/24_victory01.wav &
+         play -q skin/sfx/default/sfx_gameover.wav &
+        sleep 10000000000
+    fi
         scoreUpdate
         return
     fi
     suc=0
     scoreUpdate
+    if((mode==2&&totdel>=40))
+    then
+        taskend=1
+         clear
+        echo "mission complete"
+        echo "请Ctrl+c退出游戏"
+                play -q skin/voice/default/24_victory01.wav &
+         play -q skin/sfx/default/sfx_gameover.wav &
+
+        sleep 10000000000
+    fi
 }
 #实现Hold功能
 function Hold() {
@@ -1353,6 +1600,24 @@ function Hold() {
     Add $nowx $nowy
 }
 function Run() {
+    #开始演奏游戏BGM
+    if ((taskend==1)) 
+    then 
+        return
+    fi
+        echo "                                         ----------------------------------------------"
+echo "                                        |                  请选择bgm                    |"
+echo "                                         ----------------------------------------------"
+    echo "                                                          1.Tetris"
+echo "                                                          2.peko"
+echo "                                                          3.自己的(请到/skin/music/default目录下添加音频文件，并命名为mine.mp3)"
+    read -n 1 num1
+    
+    #bash $0 --muisc&
+    #隐藏光标
+    echo -ne "\033[?25l"
+    #取消回显
+    stty -echo
     
     Init
     GetNextBlock
@@ -1360,41 +1625,114 @@ function Run() {
      Draw
      play -q skin/voice/default/22_ready.wav
     play -q skin/voice/default/23_go.wav &
+    {  
+         while ((taskend==0)) 
+    do
+    case $num1 in
+    1)
+    play -q skin/music/default/bgm_016.ogg;;
+    2)
+        #
+                play -q skin/music/default/peko.mp3;;
+    3)
+        play -q skin/music/default/mine.mp3;;
+        esac
+
+    done } &
+     startTime=`date +%s`
+    lastTime=$startTime
+     bgmPid=$!
+    #echo  "bgmPid = $bgmPid"
     # sTTY=`stty -g`
-   while [ 1 -eq 1 ] 
+    if((mode==3)) 
+    then
+        for((i=1;i<=5;++i)) do
+            Trash
+        done
+    fi
+   while [ $taskend -eq 0 ] 
+  # echo "gameover=$gameover"
+  #更新当前游戏时间
+        echo -ne "\033[21;16H"
+    echo -ne "         "
+    echo -ne "\033[21;16H"
+    echo "time:$((`date +%s`-startTime))"
+   if ((gameover==1))
+   then
+       #kill $bgmPid
+         taskend=1
+         clear
+        echo "game over"
+        echo "请Ctrl+c退出游戏"
+                play -q skin/voice/voice_04/25_lose01.wav &
+sfx_gameover.wav        sleep 10000000000
+        return
+   fi
     do
          for ((i = 0; i < 50; i++))
-            do
+            do      
+                    echo -ne "\033[21;16H"
+    echo -ne "         "
+    echo -ne "\033[21;16H"
+    echo "time:$((`date +%s`-startTime))"
+                    if ((gameover==1))
+   then
+ #       kill $bgmPid
+         taskend=1
+         clear
+        echo "game over"
+        echo "请Ctrl+c退出游戏"
+        play -q skin/voice/voice_04/25_lose01.wav &
+                        play  -q skin/sfx/default/sfx_ko.wav &
+
+        sleep 10000000000
+        return
+   fi
+                        if ((taskend==1)) 
+                        then 
+                            return
+                        fi
                         read -t 0.02 -n 1 -s key 
                         case "$key" in
                         "A")
                         DelGhost $ghostx $ghosty
                             RRotate
+                            #玩家操作，control置1
+                            control=1
+                             echo "1" >up
                             Ghost;;
                             
                         "B")
                         DelGhost $ghostx $ghosty
+                        control=1
                             Move 1
+                                                         echo "1" >down
+
                             Ghost;;
                         "C")
                         DelGhost $ghostx $ghosty
                             Move 3
+                            control=1
+                                                         echo "1" >left
+
                             Ghost;;
                         "D")
                         DelGhost $ghostx $ghosty
+                        control=1
                             Move 2
+                            echo "1">right
                             Ghost;;
                         esac
                         if  [[ $key == "c" ]]
                         then
-                            #echo "fuck"
+                            control=1
                             DelGhost $ghostx $ghosty
                             Rotate
                             Ghost
                         fi
                         if  [[ $key == "x" ]]
                         then
-                            #echo "fuck"
+                            
                             play -q skin/sfx/default/sfx_harddrop.wav &
                             DelGhost $ghostx $ghosty
                             AllDown
@@ -1402,13 +1740,14 @@ function Run() {
                         fi
                         if  [[ $key == "z" ]]
                         then
-                            #echo "fuck"
+                            control=1
                             DelGhost $ghostx $ghosty
                             Hold
                             Ghost
                         fi
-                     #   echo "$key"
             done
+        #非玩家操作，control置0
+        control=0
         Del $tprex $tprey
         Down
         Ghost
@@ -1418,23 +1757,153 @@ function Run() {
         tprey=$nowy
        # Clean
     done
+    clear
 }
-#隐藏光标
-#演奏BGM
+#this function will be excuted when you exit
+cishu=0
+function TaskEnd(){
+    taskend=1
+    kill $bgmPid
+    
+    if((cishu==0)) 
+    then
+    if((mode==1))
+    then
+    echo "time:`date +%c` score:${score}">>score
+    fi
+    if((mode==2))
+    then
+    echo "time:`date +%c` time:$((`date +%s`-startTime))">>time
+    fi
+    if((mode==3))
+    then
+    echo "time:`date +%c` time:$((`date +%s`-startTime))">>digtime
+    fi
+    fi
+    ((cishu++))
+    echo -ne "\033[?25h"
+    stty echo 
+    clear 
+    clear 
+}
 
-  {  while ((1==1)) 
-  do
-    play -q skin/music/default/bgm_01.ogg
-done } &
-bgmPid=$!
-trap "kill $bgmPid;clear;exit" SIGINT SIGTERM SIGQUIT SIGHUP SIGSTOP SIGTSTP
-#bash $0 --muisc&
-echo -ne "\033[?25l"
-#取消回显
-stty -echo
+function menu(){
+    taskend=0
+     echo -ne "\033[0m"
+    clear
+    echo "                                         ----------------------------------------------"
+echo "                                        |                  菜单主页                     |"
+echo "                                         ----------------------------------------------"
+echo "                                                          1.开始游戏(普通模式)"
+echo "                                                          2.开始游戏(40行竞速模式)"
+echo "                                                          3.开始游戏(挖掘模式)"
+echo "                                                          4.历史分数(普通模式)"
+echo "                                                          5.历史记录(40行竞速模式)"
+echo "                                                          6.历史记录(挖掘模式)"
+echo "                                                          7.清除历史记录"
+echo "                                                          8.退出游戏"
+echo -e "\n" 
+read -p "请输入你需要操作的对应数字" -n 1 num1
+case $num1 in
+1)
+    echo "waiting"
+    printf "\033c"
+    Run
+    ;;
+2)
+echo "waiting"
+    printf "\033c"
+    mode=2
+    Run
+    ;;
+3)
+echo "waiting"
+    printf "\033c"
+    mode=3
+    Run
+    ;;
+4)
+    echo ""
+    echo "---------------------------------------------"
+    echo "分数显示如下:"
+    cat score | while read line
+    do
+    echo $line
+    done 
+    echo "按下任意键回到主菜单"
+    read -n 1 renyi
+    menu
+    ;;
+5)
+    echo ""
+    echo "---------------------------------------------"
+    echo "记录显示如下:"
+    cat time | while read line
+    do
+    echo $line
+    done 
+    echo "按下任意键回到主菜单"
+    read -n 1 renyi
+    menu
+    ;;
+6)
+    echo ""
+    echo "---------------------------------------------"
+    echo "记录显示如下:"
+    cat digtime | while read line
+    do
+    echo $line
+    done 
+    echo "按下任意键回到主菜单"
+    read -n 1 renyi
+    menu
+    ;;
+7)
+    printf "" >score
+    printf "" >time
+    echo "记录清除完毕"
+    echo "按下任意键回到主菜单"
+    read -n 1 renyi
+    menu;;
+8)
+    taskend=1
+    exit
+    ;;
+esac
+}
+
+{
+while ((taskend==0)) 
+ do
+read -n 1 -s key 
+case "$key" in
+"A")
+ echo "1" >up;;
+"B")
+ echo "1" >down;;
+"C")
+ echo "1" >right;;
+"D")
+ echo "1" >left;;
+esac
+sleep 0.1
+ echo "0" >up
+  echo "0" >down
+
+ echo "0" >left
+
+ echo "0" >right
+
+done
+} &
+ #一个装模作样的进度条
+printf "\033c"
+{
+    for ((i = 0 ; i <= 100 ; i+=10)); do
+        sleep 0.05
+        echo $i
+    done
+} | whiptail --gauge "Please wait while installing" 6 60 0
+menu
 Run
-
-
-
-
-
+TaskEnd
